@@ -23,11 +23,20 @@
 #define OPEN 3
 #define CLOSE_QUARTER 4
 #define CLOSE_HALF 5
+#define CLOSE_WITH_ENDSTOP 6
 
-float delayTime = 1.25;
+#define DELAY_TIME 1.25
+
 bool opened = true;
 int state = CLOSE;
+
 MicroDS18B20<TEMPERATURE> ds;
+
+void blink(){
+  analogWrite(LED_BUILTIN, 25);
+  delay(50);
+  digitalWrite(LED_BUILTIN, LOW);
+}
 
 void doStep(bool E1State, bool H1State, bool E2State, bool H2State)
 {
@@ -35,7 +44,7 @@ void doStep(bool E1State, bool H1State, bool E2State, bool H2State)
   digitalWrite(H1, H1State);
   digitalWrite(E2, E2State);
   digitalWrite(H2, H2State);
-  delay(delayTime);
+  delay(DELAY_TIME);
 }
 
 void stepper(byte mode)
@@ -120,42 +129,54 @@ void open(int n)
   }
 }
 
-void window(int target, int state)
+void window(int target, int current_state)
 {
   switch (target)
   {
-  case CLOSE:
-    for (int i = 0; digitalRead(ENDSTOP) && i < state * 5 * 512; ++i)
-      stepper(FORWARD);
-    // OPEN_QUARTER == 512*3
-    // OPEN_HALF == 512*6
-    // OPEN == 512*14
-    break;
+    case CLOSE_WITH_ENDSTOP:
+    {
+      for (int i = 0; digitalRead(ENDSTOP) && i < current_state * 5 * 512; ++i)
+        stepper(FORWARD);
+      // OPEN_QUARTER == 512*3
+      // OPEN_HALF == 512*6
+      // OPEN == 512*14
+      break;
+    }
 
-  case OPEN_QUARTER:
-  case OPEN_HALF:
-    open(512 * 3);
-    break;
+    case CLOSE:
+    case CLOSE_QUARTER:
+    {      
+      for (int i = 0; i < 512 * 3; ++i)
+        stepper(FORWARD);
+      break;
+    }
 
-  case OPEN:
-    open(512 * 8);
-    break;
+    case CLOSE_HALF:
+    {
+      for (int i = 0; i < 512 * 8; ++i)
+        stepper(FORWARD);
+      break;
+    }
 
-  case CLOSE_QUARTER:
-    for (int i = 0; i < 512 * 8; ++i)
-      stepper(FORWARD);
-    break;
+    case OPEN_QUARTER:
+    case OPEN_HALF:
+    {
+      open(512 * 3);
+      break;
+    }
 
-  case CLOSE_HALF:
-    for (int i = 0; i < 512 * 3; ++i)
-      stepper(FORWARD);
-    break;
+    case OPEN:
+    {
+      open(512 * 8);
+      break;
+    }
 
-  default:
-    break;
+    default:
+      break;
   }
 
   stepper(RELEASE);
+  blink();
 }
 
 void smoothLed(int max)
@@ -174,12 +195,12 @@ void smoothLed(int max)
 void setup()
 {
   pinMode(SWITCH, INPUT_PULLUP);
-  if (digitalRead(SWITCH))
-  {
-    Serial.begin(9600);
-    while (true)
-      Serial.println(readtemp());
-  }
+  // if (digitalRead(SWITCH))
+  // {
+  //   Serial.begin(9600);
+  //   while (true)
+  //     Serial.println(readtemp());
+  // }
   for (int i = 4; i < 10; i++)
     pinMode(i, OUTPUT);
   digitalWrite(EN_E, HIGH);
@@ -188,9 +209,10 @@ void setup()
   digitalWrite(LED_BUILTIN, HIGH);
   pinMode(ENDSTOP, INPUT_PULLUP);
   readtemp();
-  window(CLOSE, OPEN);
+  window(CLOSE_WITH_ENDSTOP, OPEN);
   delay(500);
   digitalWrite(LED_BUILTIN, LOW);
+  state = CLOSE;
 }
 
 void loop()
@@ -198,28 +220,18 @@ void loop()
   if (digitalRead(SWITCH))
   {
     /* manual mode */
-    window(CLOSE, state);
+    window(CLOSE_WITH_ENDSTOP, state);
     state = CLOSE;
     while (digitalRead(SWITCH))
-      smoothLed(10);
+      smoothLed(20);
     digitalWrite(LED_BUILTIN, LOW);
   }
-  float tmp = readtemp();
-  opened = digitalRead(ENDSTOP);
 
-  if (tmp < 24.5 && opened)
-  {
-    window(CLOSE, state);
-    state = CLOSE;
-  }
+  float tmp = readtemp();
+
   if (tmp > 25.1 && state == CLOSE)
   {
     window(OPEN_QUARTER, state);
-    state = OPEN_QUARTER;
-  }
-  if (tmp < 24.9 && state == OPEN_HALF)
-  {
-    window(CLOSE_QUARTER, state);
     state = OPEN_QUARTER;
   }
   if (tmp > 25.6 && state == OPEN_QUARTER)
@@ -227,18 +239,27 @@ void loop()
     window(OPEN_HALF, state);
     state = OPEN_HALF;
   }
-  if (tmp < 25.4 && state == OPEN)
-  {
-    window(CLOSE_HALF, state);
-    state = OPEN_HALF;
-  }
   if (tmp > 26.5 && state == OPEN_HALF)
   {
     window(OPEN, state);
     state = OPEN;
   }
-  analogWrite(LED_BUILTIN, 8);
-  delay(50);
-  digitalWrite(LED_BUILTIN, LOW);
+  if (tmp < 25.4 && state == OPEN)
+  {
+    window(CLOSE_HALF, state);
+    state = OPEN_HALF;
+  }
+  if (tmp < 24.9 && state == OPEN_HALF)
+  {
+    window(CLOSE_QUARTER, state);
+    state = OPEN_QUARTER;
+  }
+  if (tmp < 24.5 && state == OPEN_QUARTER)
+  {
+    window(CLOSE, state);
+    state = CLOSE;
+  }
+
+  blink();
   delay(1000);
 }

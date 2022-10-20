@@ -1,17 +1,16 @@
-// https://wiki.iarduino.ru/page/shagovye-dvigateli/
-
 #include <Arduino.h>
 #include <microDS18B20.h>
 
-#define E1 4
-#define H1 5
-#define E2 6
-#define H2 7
-#define EN_E 3
-#define EN_H 8
-#define ENDSTOP 9
-#define TEMPERATURE 10
-// BUTTON: pin D2, interrupt 0
+#define EN_E 4
+#define E1 5
+#define H1 6
+#define E2 7
+#define H2 8
+#define EN_H 9
+#define ENDSTOP 10
+#define TEMPERATURE 11
+#define SWITCH 12
+#define LED_BUILTIN 3
 
 #define FORWARD 0
 #define BACK 1
@@ -26,9 +25,7 @@
 #define CLOSE_HALF 5
 
 float delayTime = 1.25;
-// float delayTime = 1.15;
-bool closed = false;
-volatile bool btn_pressed = false;
+bool opened = true;
 int state = CLOSE;
 MicroDS18B20<TEMPERATURE> ds;
 
@@ -45,20 +42,7 @@ void stepper(byte mode)
 {
   switch (mode)
   {
-    // case 0: // full step лоховской (full1)
-    //   doStep(1, 0, 0, 0);
-    //   doStep(0, 1, 0, 0);
-    //   doStep(0, 0, 1, 0);
-    //   doStep(0, 0, 0, 1);
-    //   break;
-    // case 1: // full step пацанский (full2)
-    //   doStep(1, 0, 0, 1);
-    //   doStep(1, 1, 0, 0);
-    //   doStep(0, 1, 1, 0);
-    //   doStep(0, 0, 1, 1);
-    //   break;
-
-  case FORWARD: // half step VIP
+  case FORWARD:
     doStep(1, 0, 0, 0);
     doStep(1, 1, 0, 0);
     doStep(0, 1, 0, 0);
@@ -90,13 +74,6 @@ void stepper(byte mode)
   }
 }
 
-void buttonTick()
-{
-  // в разорванном состоянии - логическая единица
-  btn_pressed = true;
-  delay(100);
-}
-
 float readtemp()
 {
   delay(1000);
@@ -125,14 +102,15 @@ float readtemp()
 
 void open(int n)
 {
-  for (int i = 0; i < n && !btn_pressed; ++i)
+  for (int i = 0; i < n; ++i)
   {
     stepper(BACK);
-    if (i > (512 * 3 - 10) && !digitalRead(ENDSTOP))
+    if (i > (512 * 4 - 10) && !digitalRead(ENDSTOP))
     {
       stepper(RELEASE);
-      while (true){
-        digitalWrite(LED_BUILTIN, HIGH);
+      while (true)
+      {
+        analogWrite(LED_BUILTIN, 128);
         delay(500);
         digitalWrite(LED_BUILTIN, LOW);
         delay(500);
@@ -142,13 +120,16 @@ void open(int n)
   }
 }
 
-void window(int target)
+void window(int target, int state)
 {
   switch (target)
   {
   case CLOSE:
-    while (digitalRead(ENDSTOP) && !btn_pressed)
+    for (int i = 0; digitalRead(ENDSTOP) && i < state * 5 * 512; ++i)
       stepper(FORWARD);
+    // OPEN_QUARTER == 512*3
+    // OPEN_HALF == 512*6
+    // OPEN == 512*14
     break;
 
   case OPEN_QUARTER:
@@ -161,12 +142,12 @@ void window(int target)
     break;
 
   case CLOSE_QUARTER:
-    for (int i = 0; i < 512 * 8 && !btn_pressed; ++i)
+    for (int i = 0; i < 512 * 8; ++i)
       stepper(FORWARD);
     break;
 
   case CLOSE_HALF:
-    for (int i = 0; i < 512 * 3 && !btn_pressed; ++i)
+    for (int i = 0; i < 512 * 3; ++i)
       stepper(FORWARD);
     break;
 
@@ -177,79 +158,87 @@ void window(int target)
   stepper(RELEASE);
 }
 
+void smoothLed(int max)
+{
+  double d = PI / 300;
+  double s = 0;
+  for (double t = 0; t < 2 * PI; t += d)
+  {
+    s = max * (sin(t - PI / 2) + 1);
+    analogWrite(LED_BUILTIN, s);
+    delay(d * 1000);
+  }
+  delay(200);
+}
+
 void setup()
 {
-  pinMode(2, INPUT_PULLUP);
-  btn_pressed = false;
-  attachInterrupt(0, buttonTick, FALLING);
-  if (btn_pressed)
+  pinMode(SWITCH, INPUT_PULLUP);
+  if (digitalRead(SWITCH))
   {
     Serial.begin(9600);
     while (true)
       Serial.println(readtemp());
   }
-  for (int i = 3; i < 9; i++)
+  for (int i = 4; i < 10; i++)
     pinMode(i, OUTPUT);
   digitalWrite(EN_E, HIGH);
   digitalWrite(EN_H, HIGH);
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
   pinMode(ENDSTOP, INPUT_PULLUP);
   readtemp();
-  window(CLOSE);
+  window(CLOSE, OPEN);
   delay(500);
   digitalWrite(LED_BUILTIN, LOW);
-  btn_pressed = false;
 }
 
 void loop()
 {
-  float tmp = readtemp();
-  closed = !digitalRead(ENDSTOP);
-  if (!btn_pressed)
+  if (digitalRead(SWITCH))
   {
-    if (tmp < 24.5 && !closed)
-    {
-      state = CLOSE;
-      window(CLOSE);
-    }
-    if (tmp > 25.1 && state == CLOSE)
-    {
-      state = OPEN_QUARTER;
-      window(OPEN_QUARTER);
-    }
-    if (tmp < 24.9 && state == OPEN_HALF)
-    {
-      state = OPEN_QUARTER;
-      window(CLOSE_QUARTER);
-    }
-    if (tmp > 25.6 && state == OPEN_QUARTER)
-    {
-      state = OPEN_HALF;
-      window(OPEN_HALF);
-    }
-    if (tmp < 25.4 && state == OPEN)
-    {
-      state = OPEN_HALF;
-      window(CLOSE_HALF);
-    }
-    if (tmp > 26.5 && state == OPEN_HALF)
-    {
-      state = OPEN;
-      window(OPEN);
-    }
-  }
-  else
-  {
-    btn_pressed = false;
-    digitalWrite(LED_BUILTIN, HIGH);
-    if (closed)
-      window(OPEN);
-    else
-      window(CLOSE);
-    //! ждать второго нажатия на кнопку. оно переведет систему обратно в автоматический режим
-    while (!btn_pressed)
-      delay(500);
+    /* manual mode */
+    window(CLOSE, state);
+    state = CLOSE;
+    while (digitalRead(SWITCH))
+      smoothLed(10);
     digitalWrite(LED_BUILTIN, LOW);
-    btn_pressed = false;
   }
+  float tmp = readtemp();
+  opened = digitalRead(ENDSTOP);
+
+  if (tmp < 24.5 && opened)
+  {
+    window(CLOSE, state);
+    state = CLOSE;
+  }
+  if (tmp > 25.1 && state == CLOSE)
+  {
+    window(OPEN_QUARTER, state);
+    state = OPEN_QUARTER;
+  }
+  if (tmp < 24.9 && state == OPEN_HALF)
+  {
+    window(CLOSE_QUARTER, state);
+    state = OPEN_QUARTER;
+  }
+  if (tmp > 25.6 && state == OPEN_QUARTER)
+  {
+    window(OPEN_HALF, state);
+    state = OPEN_HALF;
+  }
+  if (tmp < 25.4 && state == OPEN)
+  {
+    window(CLOSE_HALF, state);
+    state = OPEN_HALF;
+  }
+  if (tmp > 26.5 && state == OPEN_HALF)
+  {
+    window(OPEN, state);
+    state = OPEN;
+  }
+  analogWrite(LED_BUILTIN, 8);
+  delay(50);
+  digitalWrite(LED_BUILTIN, LOW);
+  delay(1000);
 }

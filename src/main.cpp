@@ -8,12 +8,12 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Arduino.h>
-#include <Motor.h>
+#include <Window.h>
 #include <Wire.h>
 
 int i, n;
-int8_t mode = 0;
-unsigned long prev_click = 0;
+int8_t driver_mode = 0;
+unsigned long prev_btn_click = 0;
 
 #define OLED_PRINT(s)                                                                                                  \
     for (i = 0; i < strlen(s); i++)                                                                                    \
@@ -34,7 +34,7 @@ unsigned long prev_click = 0;
 #define TMC2209_RXD 16
 #define TMC2209_TXD 17
 #define VELOCITY 200000
-Motor motor;
+Window window;
 
 #define BUTTON 21
 #define DEBOUNCE_DELAY 250
@@ -53,7 +53,7 @@ void setup()
 {
     pinMode(BUTTON, INPUT_PULLUP);
 
-    motor.setup(Serial2);
+    window.setup(Serial2);
 
     I2C_0.begin(OLED_SDA, OLED_SCL);
     display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
@@ -69,7 +69,7 @@ void setup()
     display.setTextColor(SSD1306_WHITE); // Draw white text
     display.setCursor(32, 16);           // Start at top-left corner
     display.cp437(true);                 // Use full 256 char 'Code Page 437' font
-    if (motor.isSetupAndCommunicating())
+    if (window.isSetupAndCommunicating())
     {
         OLED_CLEAR_PRINT("TMC ok");
     }
@@ -80,40 +80,41 @@ void setup()
             ;
     }
     display.display();
-    motor.enable();
-    motor.setRunCurrent(30);
-    motor.enableAutomaticCurrentScaling();
-    motor.disableInverseMotorDirection();
-    // motor.moveAtVelocity(VELOCITY);
+    window.enable();
+    window.setRunCurrent(30);
+    window.enableAutomaticCurrentScaling();
+    window.disableInverseMotorDirection();
+    // window.moveAtVelocity(VELOCITY);
+    delay(500);
     OLED_CLEAR_PRINT("ready!");
 }
 
 void loop()
 {
-    if (!digitalRead(BUTTON) && (millis() - prev_click) > DEBOUNCE_DELAY)
+    if (!digitalRead(BUTTON) && (millis() - prev_btn_click) > DEBOUNCE_DELAY)
     {
-        ++mode;
-        if (mode % 2)
+        ++driver_mode;
+        if (driver_mode % 2)
         {
-            if (mode == 1)
+            if (driver_mode == 1)
             {
                 OLED_CLEAR_PRINT("OPEN");
-                motor.disableInverseMotorDirection();
+                window.disableInverseMotorDirection();
             }
-            if (mode == 3)
+            if (driver_mode == 3)
             {
                 OLED_CLEAR_PRINT("CLOSE");
-                motor.enableInverseMotorDirection();
+                window.enableInverseMotorDirection();
             }
-            motor.moveAtVelocity(VELOCITY);
+            window.moveAtVelocity(VELOCITY);
         }
         else
         {
             OLED_CLEAR_PRINT("STOP");
-            motor.moveAtVelocity(0);
+            window.moveAtVelocity(0);
         }
-        if (mode == 4)
-            mode = 0;
-        prev_click = millis();
+        if (driver_mode == 4)
+            driver_mode = 0;
+        prev_btn_click = millis();
     }
 }

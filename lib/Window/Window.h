@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <TMC2209.h>
 
-class Motor : private TMC2209
+class Window : private TMC2209
 {
 public:
     using TMC2209::disableInverseMotorDirection;
@@ -14,9 +14,9 @@ public:
     using TMC2209::setRunCurrent;
     using TMC2209::setup;
 
-    Motor();
+    Window();
     void move(int16_t mm);
-    void home();
+    void close();
 
 private:
     int16_t pos;

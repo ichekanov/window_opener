@@ -1,34 +1,34 @@
+// #include "../lib/test/button_test.cpp"
+// #include "../lib/test/driver_connection_test.cpp"
+// #include "../lib/test/i2c_scan.cpp"
+// #include "../lib/test/interrupt_test.cpp"
+// #include "../lib/test/motor_manual_operation_test.cpp"
+// #include "../lib/test/oled_test.cpp"
+// #include "../lib/test/wifi_test.cpp"
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 #include <Arduino.h>
 #include <Motor.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-// #include "../lib/motor_manual_operation_test.cpp"
-// #include "../lib/motor_driver_test.cpp"
-// #include "../lib/wifi_test.cpp"
-// #include "../lib/oled_test.cpp"
-// #include "../lib/i2c_scan.cpp"
-// #include "../lib/button_test.cpp"
-// #include "../lib/interrupt_test.cpp"
 
 int i, n;
 int8_t mode = 0;
 unsigned long prev_click = 0;
 
-#define OLED_PRINT(s)               \
-    for (i = 0; i < strlen(s); i++) \
-        display.write(s[i]);        \
+#define OLED_PRINT(s)                                                                                                  \
+    for (i = 0; i < strlen(s); i++)                                                                                    \
+        display.write(s[i]);                                                                                           \
     display.display();
 
-#define OLED_CLEAR()        \
-    display.clearDisplay(); \
+#define OLED_CLEAR()                                                                                                   \
+    display.clearDisplay();                                                                                            \
     display.display();
 
-#define OLED_CLEAR_PRINT(s)         \
-    display.clearDisplay();         \
-    display.setCursor(32, 16);      \
-    for (i = 0; i < strlen(s); i++) \
-        display.write(s[i]);        \
+#define OLED_CLEAR_PRINT(s)                                                                                            \
+    display.clearDisplay();                                                                                            \
+    display.setCursor(32, 16);                                                                                         \
+    for (i = 0; i < strlen(s); i++)                                                                                    \
+        display.write(s[i]);                                                                                           \
     display.display();
 
 #define TMC2209_RXD 16

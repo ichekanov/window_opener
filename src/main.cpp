@@ -1,265 +1,119 @@
 #include <Arduino.h>
-#include <microDS18B20.h>
+#include <Motor.h>
+#include <Wire.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+// #include "../lib/motor_manual_operation_test.cpp"
+// #include "../lib/motor_driver_test.cpp"
+// #include "../lib/wifi_test.cpp"
+// #include "../lib/oled_test.cpp"
+// #include "../lib/i2c_scan.cpp"
+// #include "../lib/button_test.cpp"
+// #include "../lib/interrupt_test.cpp"
 
-#define EN_E 4
-#define E1 5
-#define H1 6
-#define E2 7
-#define H2 8
-#define EN_H 9
-#define ENDSTOP 10
-#define TEMPERATURE 11
-#define SWITCH 12
-#define LED_BUILTIN 3
+int i, n;
+int8_t mode = 0;
+unsigned long prev_click = 0;
 
-#define FORWARD 0
-#define BACK 1
-#define RELEASE 2
-#define HOLD 3
+#define OLED_PRINT(s)               \
+    for (i = 0; i < strlen(s); i++) \
+        display.write(s[i]);        \
+    display.display();
 
-#define CLOSE 0
-#define OPEN_QUARTER 1
-#define OPEN_HALF 2
-#define OPEN 3
-#define CLOSE_QUARTER 4
-#define CLOSE_HALF 5
-#define CLOSE_WITH_ENDSTOP 6
+#define OLED_CLEAR()        \
+    display.clearDisplay(); \
+    display.display();
 
-#define DELAY_TIME 1.25
+#define OLED_CLEAR_PRINT(s)         \
+    display.clearDisplay();         \
+    display.setCursor(32, 16);      \
+    for (i = 0; i < strlen(s); i++) \
+        display.write(s[i]);        \
+    display.display();
 
-bool opened = true;
-int state = CLOSE;
+#define TMC2209_RXD 16
+#define TMC2209_TXD 17
+#define VELOCITY 200000
+Motor motor;
 
-MicroDS18B20<TEMPERATURE> ds;
+#define BUTTON 21
+#define DEBOUNCE_DELAY 250
 
-void blink(){
-  analogWrite(LED_BUILTIN, 25);
-  delay(50);
-  digitalWrite(LED_BUILTIN, LOW);
-}
-
-void doStep(bool E1State, bool H1State, bool E2State, bool H2State)
-{
-  digitalWrite(E1, E1State);
-  digitalWrite(H1, H1State);
-  digitalWrite(E2, E2State);
-  digitalWrite(H2, H2State);
-  delay(DELAY_TIME);
-}
-
-void stepper(byte mode)
-{
-  switch (mode)
-  {
-  case FORWARD:
-    doStep(1, 0, 0, 0);
-    doStep(1, 1, 0, 0);
-    doStep(0, 1, 0, 0);
-    doStep(0, 1, 1, 0);
-    doStep(0, 0, 1, 0);
-    doStep(0, 0, 1, 1);
-    doStep(0, 0, 0, 1);
-    doStep(1, 0, 0, 1);
-    break;
-
-  case BACK:
-    doStep(1, 0, 0, 1);
-    doStep(0, 0, 0, 1);
-    doStep(0, 0, 1, 1);
-    doStep(0, 0, 1, 0);
-    doStep(0, 1, 1, 0);
-    doStep(0, 1, 0, 0);
-    doStep(1, 1, 0, 0);
-    doStep(1, 0, 0, 0);
-    break;
-
-  case RELEASE:
-    doStep(0, 0, 0, 0);
-    break;
-
-  case HOLD:
-    doStep(1, 1, 0, 0);
-    break;
-  }
-}
-
-float readtemp()
-{
-  delay(1000);
-  float arr[3];
-  for (int i = 0; i < 3; ++i)
-  {
-    ds.requestTemp();
-    delay(1000);
-    arr[i] = ds.getTemp();
-  }
-  float k = 0;
-  for (int i = 0; i < 3; ++i)
-  {
-    for (int j = i + 1; j < 3; ++j)
-    {
-      if (arr[i] > arr[j])
-      {
-        k = arr[i];
-        arr[i] = arr[j];
-        arr[j] = k;
-      }
-    }
-  }
-  return arr[1];
-}
-
-void open(int n)
-{
-  for (int i = 0; i < n; ++i)
-  {
-    stepper(BACK);
-    if (i > (512 * 4 - 10) && !digitalRead(ENDSTOP))
-    {
-      stepper(RELEASE);
-      while (true)
-      {
-        analogWrite(LED_BUILTIN, 128);
-        delay(500);
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(500);
-      }
-      exit(0);
-    }
-  }
-}
-
-void window(int target, int current_state)
-{
-  switch (target)
-  {
-    case CLOSE_WITH_ENDSTOP:
-    {
-      for (int i = 0; digitalRead(ENDSTOP) && i < current_state * 5 * 512; ++i)
-        stepper(FORWARD);
-      // OPEN_QUARTER == 512*3
-      // OPEN_HALF == 512*6
-      // OPEN == 512*14
-      break;
-    }
-
-    case CLOSE:
-    case CLOSE_QUARTER:
-    {      
-      for (int i = 0; i < 512 * 3; ++i)
-        stepper(FORWARD);
-      break;
-    }
-
-    case CLOSE_HALF:
-    {
-      for (int i = 0; i < 512 * 8; ++i)
-        stepper(FORWARD);
-      break;
-    }
-
-    case OPEN_QUARTER:
-    case OPEN_HALF:
-    {
-      open(512 * 3);
-      break;
-    }
-
-    case OPEN:
-    {
-      open(512 * 8);
-      break;
-    }
-
-    default:
-      break;
-  }
-
-  stepper(RELEASE);
-  blink();
-}
-
-void smoothLed(int max)
-{
-  double d = PI / 300;
-  double s = 0;
-  for (double t = 0; t < 2 * PI; t += d)
-  {
-    s = max * (sin(t - PI / 2) + 1);
-    analogWrite(LED_BUILTIN, s);
-    delay(d * 1000);
-  }
-  delay(200);
-}
+#define OLED_SDA 32
+#define OLED_SCL 33
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define I2C_FREQ 100000
+#define OLED_RESET -1
+#define SCREEN_ADDRESS 0x3C
+TwoWire I2C_0 = TwoWire(0);
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &I2C_0, OLED_RESET);
 
 void setup()
 {
-  pinMode(SWITCH, INPUT_PULLUP);
-  // if (digitalRead(SWITCH))
-  // {
-  //   Serial.begin(9600);
-  //   while (true)
-  //     Serial.println(readtemp());
-  // }
-  for (int i = 4; i < 10; i++)
-    pinMode(i, OUTPUT);
-  digitalWrite(EN_E, HIGH);
-  digitalWrite(EN_H, HIGH);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
-  pinMode(ENDSTOP, INPUT_PULLUP);
-  readtemp();
-  window(CLOSE_WITH_ENDSTOP, OPEN);
-  delay(500);
-  digitalWrite(LED_BUILTIN, LOW);
-  state = CLOSE;
+    pinMode(BUTTON, INPUT_PULLUP);
+
+    motor.setup(Serial2);
+
+    I2C_0.begin(OLED_SDA, OLED_SCL);
+    display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+
+    display.clearDisplay();
+    display.drawPixel(32, 16, SSD1306_WHITE);
+    display.drawPixel(32, 63, SSD1306_WHITE);
+    display.drawPixel(95, 16, SSD1306_WHITE);
+    display.drawPixel(95, 63, SSD1306_WHITE);
+    display.display();
+
+    display.setTextSize(1);              // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE); // Draw white text
+    display.setCursor(32, 16);           // Start at top-left corner
+    display.cp437(true);                 // Use full 256 char 'Code Page 437' font
+    if (motor.isSetupAndCommunicating())
+    {
+        OLED_CLEAR_PRINT("TMC ok");
+    }
+    else
+    {
+        OLED_CLEAR_PRINT("TMC bad");
+        for (;;)
+            ;
+    }
+    display.display();
+    motor.enable();
+    motor.setRunCurrent(30);
+    motor.enableAutomaticCurrentScaling();
+    motor.disableInverseMotorDirection();
+    // motor.moveAtVelocity(VELOCITY);
+    OLED_CLEAR_PRINT("ready!");
 }
 
 void loop()
 {
-  if (digitalRead(SWITCH))
-  {
-    /* manual mode */
-    window(CLOSE_WITH_ENDSTOP, state);
-    state = CLOSE;
-    while (digitalRead(SWITCH))
-      smoothLed(20);
-    digitalWrite(LED_BUILTIN, LOW);
-  }
-
-  float tmp = readtemp();
-
-  if (tmp > 25.1 && state == CLOSE)
-  {
-    window(OPEN_QUARTER, state);
-    state = OPEN_QUARTER;
-  }
-  if (tmp > 25.6 && state == OPEN_QUARTER)
-  {
-    window(OPEN_HALF, state);
-    state = OPEN_HALF;
-  }
-  if (tmp > 26.5 && state == OPEN_HALF)
-  {
-    window(OPEN, state);
-    state = OPEN;
-  }
-  if (tmp < 25.4 && state == OPEN)
-  {
-    window(CLOSE_HALF, state);
-    state = OPEN_HALF;
-  }
-  if (tmp < 24.9 && state == OPEN_HALF)
-  {
-    window(CLOSE_QUARTER, state);
-    state = OPEN_QUARTER;
-  }
-  if (tmp < 24.5 && state == OPEN_QUARTER)
-  {
-    window(CLOSE, state);
-    state = CLOSE;
-  }
-
-  blink();
-  delay(1000);
+    if (!digitalRead(BUTTON) && (millis() - prev_click) > DEBOUNCE_DELAY)
+    {
+        ++mode;
+        if (mode % 2)
+        {
+            if (mode == 1)
+            {
+                OLED_CLEAR_PRINT("OPEN");
+                motor.disableInverseMotorDirection();
+            }
+            if (mode == 3)
+            {
+                OLED_CLEAR_PRINT("CLOSE");
+                motor.enableInverseMotorDirection();
+            }
+            motor.moveAtVelocity(VELOCITY);
+        }
+        else
+        {
+            OLED_CLEAR_PRINT("STOP");
+            motor.moveAtVelocity(0);
+        }
+        if (mode == 4)
+            mode = 0;
+        prev_click = millis();
+    }
 }

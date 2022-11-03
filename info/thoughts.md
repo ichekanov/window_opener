@@ -16,6 +16,7 @@
 - [pinout](https://www.studiopieters.nl/esp32-pinout)  
 
 # MISC
+- На дисплей помещается 11 символов в строке, 6 строк текста  
 - [C++ inheritance tip](https://stackoverflow.com/questions/2986891/how-to-publicly-inherit-from-a-base-class-but-make-some-of-public-methods-from-t)  
 - [platformio dependencies formatting](https://docs.platformio.org/en/latest/core/userguide/pkg/cmd_install.html#registry-version-requirements)  
 - [ascii page for oled](https://www.ascii-codes.com/)  

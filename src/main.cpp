@@ -12,10 +12,18 @@
 #include <Wire.h>
 
 int i, n;
-int8_t driver_mode = 0;
-unsigned long prev_btn_click = 0;
+int8_t driverMode = 0;
+unsigned long prevBtnClick = 0;
 
-#define OLED_PRINT(s)                                                                                                  \
+#define OLED_ADD_LINE(s, line)                                                                                         \
+    display.setCursor(32, 16 + 8 * line);                                                                              \
+    for (i = 0; i < strlen(s); i++)                                                                                    \
+        display.write(s[i]);
+
+#define OLED_SHOW() display.display();
+
+#define OLED_PRINT_LINE(s, line)                                                                                       \
+    display.setCursor(32, 16 + 8 * line);                                                                              \
     for (i = 0; i < strlen(s); i++)                                                                                    \
         display.write(s[i]);                                                                                           \
     display.display();
@@ -33,8 +41,8 @@ unsigned long prev_btn_click = 0;
 
 #define TMC2209_RXD 16
 #define TMC2209_TXD 17
-#define VELOCITY 200000
-Window window;
+#define TMC2209_STEP_PIN 19
+Window window(Serial2, TMC2209_STEP_PIN);
 
 #define BUTTON 21
 #define DEBOUNCE_DELAY 250
@@ -53,10 +61,12 @@ void setup()
 {
     pinMode(BUTTON, INPUT_PULLUP);
 
-    window.setup(Serial2);
-
     I2C_0.begin(OLED_SDA, OLED_SCL);
     display.begin(SSD1306_SWITCHCAPVCC, SCREEN_ADDRESS);
+
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.cp437(true);
 
     display.clearDisplay();
     display.drawPixel(32, 16, SSD1306_WHITE);
@@ -65,56 +75,20 @@ void setup()
     display.drawPixel(95, 63, SSD1306_WHITE);
     display.display();
 
-    display.setTextSize(1);              // Normal 1:1 pixel scale
-    display.setTextColor(SSD1306_WHITE); // Draw white text
-    display.setCursor(32, 16);           // Start at top-left corner
-    display.cp437(true);                 // Use full 256 char 'Code Page 437' font
-    if (window.isSetupAndCommunicating())
-    {
-        OLED_CLEAR_PRINT("TMC ok");
-    }
-    else
-    {
-        OLED_CLEAR_PRINT("TMC bad");
-        for (;;)
-            ;
-    }
-    display.display();
-    window.enable();
-    window.setRunCurrent(30);
-    window.enableAutomaticCurrentScaling();
-    window.disableInverseMotorDirection();
-    // window.moveAtVelocity(VELOCITY);
+    OLED_PRINT_LINE("Checkup...", 0);
+    OLED_PRINT_LINE("Driver OK", 1);
+    OLED_PRINT_LINE((String("M/steps ") + String(window.getMicrostepsPerStep())).c_str(), 2);
+    OLED_PRINT_LINE("Ready!", 5);
     delay(500);
-    OLED_CLEAR_PRINT("ready!");
 }
 
 void loop()
 {
-    if (!digitalRead(BUTTON) && (millis() - prev_btn_click) > DEBOUNCE_DELAY)
-    {
-        ++driver_mode;
-        if (driver_mode % 2)
-        {
-            if (driver_mode == 1)
-            {
-                OLED_CLEAR_PRINT("OPEN");
-                window.disableInverseMotorDirection();
-            }
-            if (driver_mode == 3)
-            {
-                OLED_CLEAR_PRINT("CLOSE");
-                window.enableInverseMotorDirection();
-            }
-            window.moveAtVelocity(VELOCITY);
-        }
-        else
-        {
-            OLED_CLEAR_PRINT("STOP");
-            window.moveAtVelocity(0);
-        }
-        if (driver_mode == 4)
-            driver_mode = 0;
-        prev_btn_click = millis();
-    }
+    OLED_CLEAR_PRINT("Closing...");
+    auto m = window.close();
+    OLED_CLEAR();
+    OLED_ADD_LINE("Closed!", 0);
+    OLED_ADD_LINE("STALLGUARD", 4);
+    OLED_PRINT_LINE(String(m).c_str(), 5);
+    window.moveManually(110);
 }

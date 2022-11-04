@@ -15,22 +15,25 @@
 /// @brief Initialise the Window object.
 /// @param serialConn HardwareSerial connection to control TMC2209 by UART.
 /// @param stepPin Pin for manual generation of step pulses.
-Window::Window(HardwareSerial &serialConn, const int8_t stepPin) : TMC2209()
+Window::Window() : TMC2209()
 {
     this->pos = -1;
+}
 
+bool Window::begin(HardwareSerial &serialConn, const int8_t stepPin){
     this->stepPin = stepPin;
     pinMode(stepPin, OUTPUT);
     digitalWrite(stepPin, LOW);
 
     this->setup(serialConn);
     if (!(this->isSetupAndCommunicating()))
-        exit(1);
+        return 0;
 
     this->enable();
     this->setRunCurrent(40);
     this->enableAutomaticCurrentScaling();
     this->setMicrostepsPerStep(1);
+    return 1;
 }
 
 /// @brief Controls the motor by passing the speed to the driver's register.

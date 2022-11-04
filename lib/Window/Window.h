@@ -18,10 +18,10 @@ class Window : private TMC2209
     Window(HardwareSerial &, const int8_t);
     unsigned short move(int16_t);
     unsigned short close();
-    void run();
     void moveManually(int16_t);
+    int16_t getPos() const;
 
   private:
-    int16_t pos; // mm
-    int8_t stepPin;
+    int16_t pos;    // mm from screw home position.
+    int8_t stepPin; // Pin for manual generation of step pulses
 };

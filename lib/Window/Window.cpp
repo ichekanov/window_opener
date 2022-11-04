@@ -7,8 +7,9 @@
 
 #define SCREW_PITCH 2.          // mm/rotation
 #define STEPS_PER_ROTATION 200. // steps/rotation
+#define SCREW_LENGTH 130        // mm
 
-#define STALLGUARD_THRESHOLD 60 // just a number
+#define STALLGUARD_THRESHOLD 70 // just a number
 #define STALLGUARD_DELAY 500    // ms
 
 /// @brief Initialise the Window object.
@@ -37,6 +38,12 @@ Window::Window(HardwareSerial &serialConn, const int8_t stepPin) : TMC2209()
 /// @return STALLGUARD4™ result.
 unsigned short Window::move(int16_t mm)
 {
+    if (mm > SCREW_LENGTH)
+        return -1;
+    if ((this->pos + mm) < 0)
+        return this->close();
+    if ((this->pos + mm) > SCREW_LENGTH)
+        this->close();
     if (mm < 0)
     {
         mm = abs(mm);
@@ -73,9 +80,17 @@ unsigned short Window::move(int16_t mm)
 /// @brief Controls the motor with pulses on `stepPin`. This is blocking code! Also, it is unsafe when closing window,
 /// since there is no STALLGUARD4™ monitoring.
 /// @param mm Motion delta.
-/// @return STALLGUARD4™ result.
 void Window::moveManually(int16_t mm)
 {
+    if (mm > SCREW_LENGTH)
+        return;
+    if ((this->pos + mm) < 0)
+    {
+        this->close();
+        return;
+    }
+    if ((this->pos + mm) > SCREW_LENGTH)
+        this->close();
     this->moveAtVelocity(0);
     if (mm < 0)
     {
@@ -110,6 +125,9 @@ unsigned short Window::close()
     return result;
 }
 
-void Window::run()
+/// @brief Returns window position.
+/// @return mm from screw home position.
+int16_t Window::getPos() const
 {
+    return this->pos;
 }

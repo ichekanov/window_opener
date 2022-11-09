@@ -34,7 +34,7 @@ void setup()
     pinMode(BUTTON, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(BUTTON), buttonClicked, FALLING);
 
-    digitalWrite(LED_BUILTIN, HIGH);
+    // digitalWrite(LED_BUILTIN, HIGH);
 }
 
 void loop()

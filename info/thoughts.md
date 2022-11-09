@@ -20,3 +20,8 @@
 - [C++ inheritance tip](https://stackoverflow.com/questions/2986891/how-to-publicly-inherit-from-a-base-class-but-make-some-of-public-methods-from-t)  
 - [platformio dependencies formatting](https://docs.platformio.org/en/latest/core/userguide/pkg/cmd_install.html#registry-version-requirements)  
 - [ascii page for oled](https://www.ascii-codes.com/)  
+- [c++ variables](https://alexgyver.ru/lessons/variables-types/)
+
+# HTTP server
+- [Mozilla guide](https://developer.mozilla.org/en-US/docs/Learn/Common_questions/set_up_a_local_testing_server)  
+- [python docs](https://docs.python.org/3/library/http.server.html)  

@@ -7,7 +7,6 @@
 
 #define SCREW_PITCH 2.          // mm/rotation
 #define STEPS_PER_ROTATION 200. // steps/rotation
-#define SCREW_LENGTH 130        // mm
 
 #define STALLGUARD_THRESHOLD 70 // just a number
 #define STALLGUARD_DELAY 500    // ms
@@ -20,7 +19,8 @@ Window::Window() : TMC2209()
     this->pos = -1;
 }
 
-bool Window::begin(HardwareSerial &serialConn, const int8_t stepPin){
+bool Window::begin(HardwareSerial &serialConn, const int8_t stepPin)
+{
     this->stepPin = stepPin;
     pinMode(stepPin, OUTPUT);
     digitalWrite(stepPin, LOW);
@@ -43,10 +43,12 @@ unsigned short Window::move(int16_t mm)
 {
     if (mm > SCREW_LENGTH)
         return -1;
-    if ((this->pos + mm) < 0)
+    if ((this->pos + mm) < 0 && mm != INT16_MIN)
         return this->close();
     if ((this->pos + mm) > SCREW_LENGTH)
         this->close();
+    if (mm != INT16_MIN)
+        this->pos = this->pos + mm;
     if (mm < 0)
     {
         mm = abs(mm);
@@ -87,13 +89,15 @@ void Window::moveManually(int16_t mm)
 {
     if (mm > SCREW_LENGTH)
         return;
-    if ((this->pos + mm) < 0)
+    if ((this->pos + mm) < 0 && mm != INT16_MIN)
     {
         this->close();
         return;
     }
     if ((this->pos + mm) > SCREW_LENGTH)
         this->close();
+    if (mm != INT16_MIN)
+        this->pos = this->pos + mm;
     this->moveAtVelocity(0);
     if (mm < 0)
     {
@@ -130,7 +134,7 @@ unsigned short Window::close()
 
 /// @brief Returns window position.
 /// @return mm from screw home position.
-int16_t Window::getPos() const
+int16_t Window::getPosition() const
 {
     return this->pos;
 }

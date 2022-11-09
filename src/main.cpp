@@ -16,33 +16,12 @@
 #include <Window.h>
 #include <Wire.h>
 
-int i;
+#define L(line) 16 + 8 * line
+#define C(col) 32 + 6 * col
 
-#define OLED_ADD_LINE(s, line)                                                                                         \
-    display.setCursor(32, 16 + 8 * line);                                                                              \
-    for (i = 0; i < strlen(s); i++)                                                                                    \
-        display.write(s[i]);
-
-#define OLED_SHOW() display.display();
-
-#define OLED_PRINT_LINE(s, line)                                                                                       \
-    display.setCursor(32, 16 + 8 * line);                                                                              \
-    for (i = 0; i < strlen(s); i++)                                                                                    \
-        display.write(s[i]);                                                                                           \
-    display.display();
-
-#define OLED_CLEAR()                                                                                                   \
-    display.clearDisplay();                                                                                            \
-    display.display();
-
-#define OLED_CLEAR_PRINT(s)                                                                                            \
-    display.clearDisplay();                                                                                            \
-    display.setCursor(32, 16);                                                                                         \
-    for (i = 0; i < strlen(s); i++)                                                                                    \
-        display.write(s[i]);                                                                                           \
-    display.display();
-
-#define FLOAT_TO_STRING(f) String(f).substring(0, String(f).indexOf(".") + 2).c_str()
+#define MIN_TEMPERATURE 19.5
+#define MAX_TEMPERATURE 25.
+#define MOVE_THRESHOLD 5
 
 #define TMC2209_RXD 16
 #define TMC2209_TXD 17
@@ -64,6 +43,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &I2C_0, OLED_RESET);
 
 float getTemperature();
 bool connectWiFi(const char *, const char *);
+int16_t calculatePosition(float);
 
 void setup()
 {
@@ -74,73 +54,105 @@ void setup()
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.cp437(true);
-    OLED_CLEAR();
+    display.clearDisplay();
+    display.display();
 
-    delay(5000);
-
-    OLED_PRINT_LINE("Starting...", 0);
-    delay(250);
-
-    OLED_PRINT_LINE("Driver", 1);
+    display.setCursor(C(0), L(0));
+    display.print("Driver");
     if (!window.begin(Serial2, TMC2209_STEP_PIN))
     {
-        OLED_PRINT_LINE("       bad", 1);
-        // OLED_PRINT_LINE("Cant reach", 2);
-        // OLED_PRINT_LINE("Reboot...", 5);
-        // delay(2000);
-        // exit(1);
+        display.print(".bad");
     }
-    OLED_PRINT_LINE("        OK", 1);
-    window.disable();
+    display.print("..ok");
+    display.display();
     delay(250);
 
-    OLED_PRINT_LINE("WiFi", 2);
+    display.setCursor(C(0), L(1));
+    display.print("WiFi");
+    display.display();
     if (!connectWiFi(ssid, password))
     {
-        OLED_PRINT_LINE("Cant reach", 3);
-        OLED_PRINT_LINE("Reboot...", 5);
-        delay(2000);
-        exit(1);
+        display.print("...bad");
     }
-    OLED_PRINT_LINE("        OK", 2);
-    window.enable();
-    delay(250);
-
-    OLED_PRINT_LINE("t", 3);
-    display.write(248);
+    display.print("....ok");
     display.display();
-    auto temperature = getTemperature();
-    if (temperature == 404.)
-    {
-        OLED_PRINT_LINE("Cant reach", 4);
-        OLED_PRINT_LINE("Reboot...", 5);
-        delay(2000);
-        exit(1);
-    }
-    OLED_PRINT_LINE((String("      ") + FLOAT_TO_STRING(temperature)).c_str(), 3);
     delay(250);
 
-    OLED_PRINT_LINE("Ready!", 5);
-    delay(2000);
+    display.setCursor(C(0), L(2));
+    auto temperature = getTemperature();
+    if (temperature >= 100.)
+    {
+        display.print("t\xF8.....bad");
+    }
+    else
+    {
+        display.print("t\xF8=");
+        display.print(temperature, 1);
+    }
+    display.display();
+    delay(250);
+
+    display.setCursor(C(0), L(3));
+    display.print("Homing...");
+    display.display();
+    auto result = window.close();
+    display.setCursor(C(0), L(4));
+    display.print("Stall=" + String(result));
+    display.setCursor(C(0), L(5));
+    display.print("Ready!");
+    display.display();
+    delay(3000);
 }
 
 void loop()
 {
-    // //* testing stallguard
-    // OLED_CLEAR_PRINT("Closing...");
-    // auto m = window.close();
-    // OLED_CLEAR();
-    // OLED_ADD_LINE("Closed!", 0);
-    // OLED_ADD_LINE("STALLGUARD", 4);
-    // OLED_PRINT_LINE(String(m).c_str(), 5);
-    // window.moveManually(110);
+    auto temperature = getTemperature();
 
-    // //* testing temperature getter
-    auto r = getTemperature();
-    OLED_CLEAR_PRINT(FLOAT_TO_STRING(r));
+    if (temperature >= 100.)
+    {
+        display.clearDisplay();
+        display.setCursor(C(0), L(0));
+        display.print("Can't get");
+        display.setCursor(C(0), L(1));
+        display.print("temperature");
+        display.setCursor(C(0), L(3));
+        display.print("err=");
+        display.print(temperature, 0);
+        display.display();
+        delay(500);
+        return;
+    }
+
+    auto new_position = calculatePosition(temperature);
+
+    display.clearDisplay();
+    display.setCursor(C(0), L(0));
+    display.print("t\xF8=");
+    display.print(temperature, 1);
+    display.setCursor(C(0), L(2));
+    display.print("new=");
+    display.print(new_position);
+    display.setCursor(C(0), L(3));
+    display.print("curr=");
+    display.print(window.getPosition());
+    display.display();
+
+    if (abs(new_position - window.getPosition()) > MOVE_THRESHOLD)
+    {
+        display.setCursor(C(0), L(5));
+        display.print("delta=");
+        display.print(new_position - window.getPosition());
+        display.display();
+        window.moveManually(new_position - window.getPosition());
+    }
+
     delay(1000);
 }
 
+/// @brief Connect board to WiFi
+/// @param ssid WiFi SSID
+/// @param password WiFi password
+/// @return True if connection was successful, false otherwise
 bool connectWiFi(const char *ssid, const char *password)
 {
     delay(1000);
@@ -149,11 +161,14 @@ bool connectWiFi(const char *ssid, const char *password)
     {
         delay(1000);
         if (WiFi.status() == WL_CONNECTED)
-            return 1;
+            return true;
     }
-    return 0;
+    return false;
 }
 
+
+/// @brief Get temperature from the server
+/// @return Temperature
 float getTemperature()
 {
     float result;
@@ -165,10 +180,26 @@ float getTemperature()
         if (httpCode > 0)
             result = http.getString().toFloat(); // actual temperature
         else
-            result = 404.; // server is not responding.
+            result = 404.; // server does not responding
         http.end();
     }
     else
         result = 408.; // no WiFi connection
     return result;
+}
+
+/// @brief Calculate position of the window
+/// @param temperature Temperature in the room
+/// @return Position of the window in mm
+int16_t calculatePosition(float temperature)
+{
+    if (temperature < MIN_TEMPERATURE)
+        return 0;
+    if (temperature > MAX_TEMPERATURE)
+        return SCREW_LENGTH;
+
+    // map() analog to deal with float
+    const float run = MAX_TEMPERATURE - MIN_TEMPERATURE;
+    const float delta = temperature - MIN_TEMPERATURE;
+    return int16_t(delta / run * SCREW_LENGTH);
 }

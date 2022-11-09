@@ -1,3 +1,5 @@
+/lib/Secrets
+
 # Created by https://www.toptal.com/developers/gitignore/api/visualstudiocode,platformio,c++,macos,windows
 # Edit at https://www.toptal.com/developers/gitignore?templates=visualstudiocode,platformio,c++,macos,windows
 
@@ -77,11 +79,6 @@ Temporary Items
 
 ### VisualStudioCode ###
 .vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
-!.vscode/*.code-snippets
 
 # Local History for Visual Studio Code
 .history/

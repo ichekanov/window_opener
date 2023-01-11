@@ -36,7 +36,7 @@ bool Window::begin(HardwareSerial &serialConn, const int8_t stepPin)
     return 1;
 }
 
-/// @brief Controls the motor by passing the speed to the driver's register.
+/// @brief Controls the motor by passing the speed to the driver's register. This is blocking code!
 /// @param mm Motion delta.
 /// @return STALLGUARD4™ result.
 unsigned short Window::move(int16_t mm)
@@ -137,4 +137,9 @@ unsigned short Window::close()
 int16_t Window::getPosition() const
 {
     return this->pos;
+}
+
+void Window::setPosition(int16_t pos)
+{
+    this->pos = pos;
 }

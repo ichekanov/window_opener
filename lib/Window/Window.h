@@ -12,6 +12,7 @@ class Window : private TMC2209
     unsigned short close();
     void moveManually(int16_t);
     int16_t getPosition() const;
+    void setPosition(int16_t);
 
   private:
     int16_t pos;    // mm from screw home position.
